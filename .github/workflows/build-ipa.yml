@@ -1,0 +1,81 @@
+name: Build unsigned IPA
+
+# Produces a DeskCall.ipa you download from the run's Artifacts section and
+# install with Sideloadly, which re-signs it with your own Apple ID.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ios/**"
+      - ".github/workflows/build-ipa.yml"
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: "Lookup server URL to bake into the build"
+        required: false
+        default: "https://deskcall-api.onrender.com"
+
+jobs:
+  build:
+    runs-on: macos-14
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Bake in the API base URL
+        if: inputs.api_base_url != ''
+        env:
+          API_URL: ${{ inputs.api_base_url }}
+        run: |
+          for plist in ios/DeskCall/Info.plist ios/CallDirectory/Info.plist; do
+            /usr/libexec/PlistBuddy -c "Set :DeskCallAPIBaseURL $API_URL" "$plist"
+          done
+          echo "Baked $API_URL into both targets."
+
+      - name: Generate Xcode project
+        working-directory: ios
+        run: xcodegen generate
+
+      - name: Archive (unsigned)
+        working-directory: ios
+        run: |
+          xcodebuild archive \
+            -project DeskCall.xcodeproj \
+            -scheme DeskCall \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/DeskCall.xcarchive" \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO
+
+      - name: Package into an .ipa
+        run: |
+          APP_PATH="$RUNNER_TEMP/DeskCall.xcarchive/Products/Applications/DeskCall.app"
+          test -d "$APP_PATH" || { echo "No .app in the archive"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$APP_PATH" "$RUNNER_TEMP/Payload/"
+          # Sideloadly re-signs everything, so any CI-era signature is dead weight.
+          rm -rf "$RUNNER_TEMP/Payload/DeskCall.app/_CodeSignature"
+          rm -rf "$RUNNER_TEMP/Payload/DeskCall.app/PlugIns/"*/_CodeSignature
+          cd "$RUNNER_TEMP"
+          zip -qry DeskCall.ipa Payload
+          ls -lh DeskCall.ipa
+          unzip -l DeskCall.ipa | head -20
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: DeskCall-ipa
+          path: ${{ runner.temp }}/DeskCall.ipa
+          retention-days: 30
+          if-no-files-found: error

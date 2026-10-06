@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: deskcall-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: MOCK_MODE
+        value: "true"
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: B2B_API_KEY
+        sync: false
+      - key: CLIENT_KEYS
+        sync: false

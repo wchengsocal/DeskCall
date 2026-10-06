@@ -1,0 +1,8 @@
+{
+  "_comment": "Numbers reported enough times to be auto-blocked on device. Reserved/test ranges only by default -- replace with your own feed.",
+  "blocked": [
+    "+18005559999",
+    "+18885550000",
+    "+18775551111"
+  ]
+}
